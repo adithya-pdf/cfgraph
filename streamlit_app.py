@@ -24,6 +24,7 @@ from cf_rating_vs_solved import (
     fetch_accepted_problems,
     fetch_contest_windows,
     fetch_rating_history,
+    filter_hard_solves,
     per_contest_series,
 )
 
@@ -369,6 +370,19 @@ def inject_css() -> None:
             font-size: 0.8rem;
         }}
 
+        .hard-pill {{
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            background: #eef2ff;
+            color: #1e3a8a;
+            border: 1px solid #c7d2fe;
+            padding: 0.2rem 0.6rem;
+            border-radius: 999px;
+            font-weight: 700;
+            font-size: 0.8rem;
+        }}
+
         .profile-key {{
             display: flex;
             flex-wrap: wrap;
@@ -576,8 +590,11 @@ def refresh_data() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _hover_template(mode: str) -> str:
-    solved_label = "Problems solved" if mode == "cumulative" else "Solved in contest"
+def _hover_template(mode: str, hard_solves: bool) -> str:
+    if mode == "cumulative":
+        solved_label = "Hard solves" if hard_solves else "Problems solved"
+    else:
+        solved_label = "Hard solves in contest" if hard_solves else "Solved in contest"
     return (
         "<b>@%{customdata[0]}</b> &nbsp;\u00b7&nbsp; %{customdata[1]}<br>"
         "Rating: <b>%{y:,}</b> &nbsp;\u00b7&nbsp; %{customdata[2]}<br>"
@@ -591,6 +608,8 @@ def build_chart(
     profiles: Sequence[Profile],
     mode: str,
     *,
+    hard_solves: bool,
+    full_scale: bool,
     color_mode: str,
     show_bands: bool,
     show_markers: bool,
@@ -608,7 +627,11 @@ def build_chart(
 
     low, high = int(all_ratings.min()), int(all_ratings.max())
     pad = max(55, int((high - low) * 0.07))
-    y_range = [max(0, low - pad), high + pad]
+    y_min = max(0, low - pad)
+    y_max = high + pad
+    if full_scale:
+        y_max = max(y_max, 3050)
+    y_range = [y_min, y_max]
     x_max = max(1, int(all_solved.max()))
     x_range = [0, x_max * 1.05]
 
@@ -681,7 +704,7 @@ def build_chart(
                     name=profile.handle,
                     showlegend=False,
                     customdata=customdata,
-                    hovertemplate=_hover_template(mode),
+                    hovertemplate=_hover_template(mode, hard_solves),
                     marker=dict(
                         size=7.8 if is_single else 8.2,
                         color=profile.color,
@@ -706,7 +729,7 @@ def build_chart(
                         name=f"{profile.handle} \u00b7 {tier.label}",
                         showlegend=False,
                         customdata=customdata[mask],
-                        hovertemplate=_hover_template(mode),
+                        hovertemplate=_hover_template(mode, hard_solves),
                         marker=dict(
                             size=7.8 if is_single else 8.2,
                             color=tier.color,
@@ -852,9 +875,9 @@ def build_chart(
         )
 
     x_label = (
-        "Problems solved (cumulative)"
+        ("Hard solves (cumulative)" if hard_solves else "Problems solved (cumulative)")
         if mode == "cumulative"
-        else "Problems solved in contest"
+        else ("Hard solves in contest" if hard_solves else "Problems solved in contest")
     )
     fig.update_layout(
         height=650,
@@ -933,6 +956,9 @@ class Controls:
     handles: list[str]
     mode: str
     rating_range: tuple[int, int] | None
+    hard_solves: bool
+    hard_margin: int
+    full_scale: bool
     color_mode: str
     show_bands: bool
     show_markers: bool
@@ -948,7 +974,7 @@ def filter_text(rating_range: tuple[int, int] | None) -> str | None:
     return f"Problems rated {low:,}\u2013{high:,}"
 
 
-def stat_cards(profile: Profile, mode: str) -> None:
+def stat_cards(profile: Profile, mode: str, hard_solves: bool) -> None:
     series = profile.series
     history = series.history
     latest = history[-1]
@@ -969,14 +995,20 @@ def stat_cards(profile: Profile, mode: str) -> None:
         solved_foot = (
             f"{solved_value - series.solved[-2]:+,} since previous round"
             if len(series.solved) > 1
-            else "distinct accepted"
+            else ("distinct hard solves" if hard_solves else "distinct accepted")
         )
-        solved_label = "PROBLEMS SOLVED"
+        solved_label = "HARD SOLVES" if hard_solves else "PROBLEMS SOLVED"
     else:
         solved_value = int(sum(series.solved))
         median = int(np.median(series.solved))
-        solved_foot = f"median {median} per rated round"
-        solved_label = "SOLVED IN RATED ROUNDS"
+        solved_foot = (
+            f"median {median} hard per rated round"
+            if hard_solves
+            else f"median {median} per rated round"
+        )
+        solved_label = (
+            "HARD SOLVES IN RATED ROUNDS" if hard_solves else "SOLVED IN RATED ROUNDS"
+        )
 
     st.markdown(
         f"""
@@ -1014,7 +1046,7 @@ def stat_cards(profile: Profile, mode: str) -> None:
     )
 
 
-def profile_cards(profiles: Sequence[Profile], mode: str) -> None:
+def profile_cards(profiles: Sequence[Profile], mode: str, hard_solves: bool) -> None:
     cards = []
     for profile in profiles:
         series = profile.series
@@ -1024,10 +1056,16 @@ def profile_cards(profiles: Sequence[Profile], mode: str) -> None:
         latest_tier = tier_for(latest.rating)
         if mode == "cumulative":
             solved_value = series.solved[-1]
-            solved_foot = f"{solved_value:,} solved"
+            solved_foot = (
+                f"{solved_value:,} hard" if hard_solves else f"{solved_value:,} solved"
+            )
         else:
             solved_value = int(sum(series.solved))
-            solved_foot = f"{solved_value:,} solved \u00b7 {int(np.median(series.solved))} median"
+            solved_foot = (
+                f"{solved_value:,} hard \u00b7 {int(np.median(series.solved))} median"
+                if hard_solves
+                else f"{solved_value:,} solved \u00b7 {int(np.median(series.solved))} median"
+            )
 
         cards.append(
             f'<div class="profile-card">'
@@ -1166,6 +1204,40 @@ def sidebar_controls() -> Controls:
         else:
             st.caption("Counting every accepted problem, including unrated problems.")
 
+        hard_solves = st.toggle(
+            "Hard solves only",
+            value=False,
+            help=(
+                "Count a problem only when its Codeforces rating is greater than or "
+                "equal to your rating at the time you solved it, plus the margin."
+            ),
+        )
+        hard_margin = 0
+        if hard_solves:
+            hard_margin = int(st.number_input(
+                "Hardness margin (x)",
+                min_value=-3000,
+                max_value=3000,
+                value=0,
+                step=50,
+                key="hard_margin",
+                help=(
+                    "A problem counts only when its rating is at least your rating "
+                    "at solve time plus x. Negative x makes the rule easier; "
+                    "positive x makes it harder."
+                ),
+            ))
+            if hard_margin == 0:
+                threshold_text = "your rating when you solved it"
+            elif hard_margin > 0:
+                threshold_text = f"your rating + {hard_margin}"
+            else:
+                threshold_text = f"your rating - {abs(hard_margin)}"
+            st.caption(
+                f"Hard solve = problem rating \u2265 {threshold_text}. "
+                "Solves before your first rating update are excluded."
+            )
+
         color_mode = "rank"
         if len(st.session_state.profiles) > 1:
             st.divider()
@@ -1184,6 +1256,14 @@ def sidebar_controls() -> Controls:
             "Rating-tier bands",
             value=True,
             help="Shade the chart by Codeforces rank colour.",
+        )
+        full_scale = st.toggle(
+            "Full rating scale",
+            value=True,
+            help=(
+                "Extend the Y axis to 3000+ so every Codeforces rank colour "
+                "is visible, even above your peak rating."
+            ),
         )
         show_markers = st.toggle(
             "Peak / latest markers",
@@ -1208,6 +1288,9 @@ def sidebar_controls() -> Controls:
         handles=list(st.session_state.profiles),
         mode=st.session_state.mode,
         rating_range=rating_range,
+        hard_solves=hard_solves,
+        hard_margin=hard_margin,
+        full_scale=full_scale,
         color_mode=color_mode,
         show_bands=show_bands,
         show_markers=show_markers,
@@ -1215,15 +1298,22 @@ def sidebar_controls() -> Controls:
     )
 
 
-def render_hero(profiles: Sequence[Profile], mode: str, rated_text: str | None) -> None:
+def render_hero(
+    profiles: Sequence[Profile],
+    mode: str,
+    rated_text: str | None,
+    hard_solves: bool,
+    hard_margin: int,
+) -> None:
     total_rounds = sum(len(profile.history) for profile in profiles)
     first_year = min(profile.history[0].date.year for profile in profiles)
     last_year = max(profile.history[-1].date.year for profile in profiles)
     years = str(first_year) if first_year == last_year else f"{first_year}\u2013{last_year}"
+    metric_name = "hard solves" if hard_solves else "problems solved"
     mode_note = (
-        "X = cumulative problems solved \u00b7 Y = contest rating"
+        f"X = cumulative {metric_name} \u00b7 Y = contest rating"
         if mode == "cumulative"
-        else "X = problems solved in a round \u00b7 Y = contest rating"
+        else f"X = {metric_name} in a round \u00b7 Y = contest rating"
     )
     pills = "".join(
         f'<span class="handle-pill">@{html.escape(profile.handle)}</span>'
@@ -1254,11 +1344,19 @@ def render_hero(profiles: Sequence[Profile], mode: str, rated_text: str | None) 
         if rated_text
         else ""
     )
+    hard_pill = (
+        f'<span class="hard-pill">Hard solves \u00b7 {hard_margin:+d}</span>'
+        if hard_solves and hard_margin
+        else '<span class="hard-pill">Hard solves only</span>'
+        if hard_solves
+        else ""
+    )
+    title = "Hard solves" if hard_solves else "Problems solved"
     st.markdown(
         '<div class="hero">'
         '<div class="eyebrow"><span class="live-dot"></span> Codeforces analytics</div>'
-        '<h1>Problems solved <span class="times">\u00d7</span> rating</h1>'
-        f'<div class="hero-meta">{meta}{filter_pill}</div>'
+        f'<h1>{title} <span class="times">\u00d7</span> rating</h1>'
+        f'<div class="hero-meta">{meta}{filter_pill}{hard_pill}</div>'
         "</div>",
         unsafe_allow_html=True,
     )
@@ -1282,7 +1380,8 @@ def profile_key(profiles: Sequence[Profile]) -> None:
     )
 
 
-def data_table(profiles: Sequence[Profile], mode: str) -> None:
+def data_table(profiles: Sequence[Profile], mode: str, hard_solves: bool) -> None:
+    solved_column = "Hard solves" if hard_solves else "Solved"
     rows = []
     for profile in profiles:
         for contest, solved in zip(profile.series.history, profile.series.solved):
@@ -1292,17 +1391,18 @@ def data_table(profiles: Sequence[Profile], mode: str) -> None:
                     "Date": contest.date.strftime("%Y-%m-%d"),
                     "Contest": contest.name,
                     "Rank": contest.rank,
-                    "Solved": int(solved),
+                    solved_column: int(solved),
                     "Rating": contest.rating,
                     "Tier": exact_tier(contest.rating),
                 }
             )
     frame = pd.DataFrame(rows)
+    suffix = "_hard" if hard_solves else ""
     if len(profiles) == 1:
         frame = frame.drop(columns=["Profile"])
-        file_name = f"{profiles[0].handle}_{mode}.csv"
+        file_name = f"{profiles[0].handle}_{mode}{suffix}.csv"
     else:
-        file_name = f"cf_profiles_{mode}.csv"
+        file_name = f"cf_profiles_{mode}{suffix}.csv"
     frame = frame.sort_values("Date", ascending=False)
 
     with st.expander("View the underlying rounds", expanded=False):
@@ -1316,9 +1416,19 @@ def data_table(profiles: Sequence[Profile], mode: str) -> None:
                 "Date": st.column_config.TextColumn("Date", width="small"),
                 "Contest": st.column_config.TextColumn("Contest", width="large"),
                 "Rank": st.column_config.NumberColumn("Rank", format="%d", width="small"),
-                "Solved": st.column_config.NumberColumn(
-                    "Solved", format="%d", width="small",
-                    help="Cumulative total" if mode == "cumulative" else "Solved in contest",
+                solved_column: st.column_config.NumberColumn(
+                    solved_column,
+                    format="%d",
+                    width="small",
+                    help=(
+                        "Cumulative hard solves"
+                        if mode == "cumulative" and hard_solves
+                        else "Cumulative total"
+                        if mode == "cumulative"
+                        else "Hard solves in contest"
+                        if hard_solves
+                        else "Solved in contest"
+                    ),
                 ),
                 "Rating": st.column_config.NumberColumn("Rating", format="%d", width="small"),
                 "Tier": st.column_config.TextColumn("Tier", width="medium"),
@@ -1378,6 +1488,13 @@ with st.spinner(f"Loading {len(controls.handles)} profile(s) from Codeforces..."
                 if problem.rating is not None and low <= problem.rating <= high
             ]
 
+        if controls.hard_solves:
+            accepted = filter_hard_solves(
+                accepted,
+                history,
+                margin=controls.hard_margin,
+            )
+
         loaded.append((canonical, history, accepted))
 
 if not loaded:
@@ -1426,16 +1543,22 @@ for index, (canonical, history, accepted) in enumerate(loaded):
     )
 
 rated_text = filter_text(controls.rating_range)
-render_hero(profiles, controls.mode, rated_text)
+render_hero(
+    profiles,
+    controls.mode,
+    rated_text,
+    controls.hard_solves,
+    controls.hard_margin,
+)
 
 if failures:
     for handle, message in failures:
         st.warning(f"Could not load @{handle}: {message}")
 
 if len(profiles) == 1:
-    stat_cards(profiles[0], controls.mode)
+    stat_cards(profiles[0], controls.mode, controls.hard_solves)
 else:
-    profile_cards(profiles, controls.mode)
+    profile_cards(profiles, controls.mode, controls.hard_solves)
 
 if missing_windows:
     st.warning(
@@ -1443,17 +1566,27 @@ if missing_windows:
         "all accepted submissions for those rounds were counted."
     )
 
-if rated_text and not any(sum(profile.series.solved) for profile in profiles):
+if (rated_text or controls.hard_solves) and not any(
+    sum(profile.series.solved) for profile in profiles
+):
     st.warning(
-        "No accepted problems match this rating range. "
-        "Try widening the problem-rating filter."
+        "No solved problems match the current problem-rating and hard-solve filters. "
+        "Try widening P\u2013Q or disabling Hard solves only."
     )
 
-chart_title = (
-    "Cumulative problems solved vs. rating"
-    if controls.mode == "cumulative"
-    else "Problems solved per contest vs. rating"
-)
+if controls.hard_solves:
+    hard_suffix = f" ({controls.hard_margin:+d})" if controls.hard_margin else ""
+    chart_title = (
+        f"Cumulative hard solves{hard_suffix} vs. rating"
+        if controls.mode == "cumulative"
+        else f"Hard solves per contest{hard_suffix} vs. rating"
+    )
+else:
+    chart_title = (
+        "Cumulative problems solved vs. rating"
+        if controls.mode == "cumulative"
+        else "Problems solved per contest vs. rating"
+    )
 if len(profiles) > 1:
     if controls.color_mode == "profile":
         chart_note = "Each dot is a rated round. Colour and marker shape identify the profile."
@@ -1464,6 +1597,16 @@ else:
         "Each dot is a rated round, coloured by rank. The line follows your contest history."
         if controls.mode == "cumulative"
         else "Each dot is a rated round, coloured by rank. Dashed line = median rating per solve count."
+    )
+if controls.hard_solves:
+    if controls.hard_margin > 0:
+        margin_note = f" + {controls.hard_margin}"
+    elif controls.hard_margin < 0:
+        margin_note = f" - {abs(controls.hard_margin)}"
+    else:
+        margin_note = ""
+    chart_note += (
+        f" Hard solve = problem rating \u2265 rating at solve time{margin_note}."
     )
 
 st.markdown(
@@ -1479,6 +1622,8 @@ st.markdown(
 fig = build_chart(
     profiles,
     controls.mode,
+    hard_solves=controls.hard_solves,
+    full_scale=controls.full_scale,
     color_mode=controls.color_mode,
     show_bands=controls.show_bands,
     show_markers=controls.show_markers,
@@ -1503,7 +1648,7 @@ profile_key(profiles)
 rating_tier_key()
 st.caption("Hover any dot for the profile, contest, rating, rank, and solve count.")
 
-data_table(profiles, controls.mode)
+data_table(profiles, controls.mode, controls.hard_solves)
 
 st.markdown(
     '<div class="footer">'

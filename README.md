@@ -87,7 +87,12 @@ Leave the filter on **All ratings** to count every accepted problem as before.
   solve count.
 - **Zoom / pan** in the chart; scroll to zoom.
 - Toggle **Rating-tier bands** for Codeforces rank background bands.
+- Toggle **Full rating scale** to keep every rank colour visible up to 3000+,
+  even when your peak is lower.
 - Toggle **Peak / latest markers**.
+- Toggle **Hard solves only** and set a **Hardness margin (x)** to require a
+  problem rating at least `your rating + x`. Positive margins are harder;
+  negative margins are easier.
 - Switch views and profiles without restarting the app.
 - Expand **View the underlying rounds** for a sortable table.
 - **Download CSV** of every rated round for the selected profiles.
@@ -108,6 +113,44 @@ The dashboard uses the official Codeforces rank palette:
 
 The exact rank name (for example “International Master” at 2300–2399) appears
 in the hover tooltip and metric cards.
+
+By default, **Full rating scale** extends the Y axis to 3000+ so every rank
+colour is visible even if your peak is lower. Turn it off to zoom the Y axis
+tightly around your own rating range.
+
+## Hard solves
+
+Enable **Hard solves only** to count a problem only when its Codeforces problem
+rating is **greater than or equal to your rating when you solved it**.
+
+Use **Hardness margin (x)** to raise that bar:
+
+```text
+problem rating >= your rating at solve time + x
+```
+
+- `x = 0` is the original rule.
+- `x = 100` means you only count problems at least 100 points above your
+  rating at the time.
+- `x = -100` means you also count problems up to 100 points below your rating
+  at the time.
+- The margin accepts -3000 to 3000, in 50-point steps.
+- For a solve during a rated round, the comparison uses the rating you carried
+  **into** that round — rating updates happen after the contest.
+- For practice/upsolving submissions, it uses your latest rating update before
+  the accepted submission.
+- Solves made before your first rating update are excluded because there is no
+  rating-at-the-time yet.
+- Problems with no Codeforces difficulty rating are excluded.
+- Hard-solve mode combines with the P/Q filter: both conditions must hold.
+- The stats card, chart title, axis label, hover text, and CSV all switch to
+  “hard solves” terminology.
+
+This is **not** Codeforces’ own “hard problem” label. It is relative to the
+user: a 1700-rated problem is hard for a 1500-rated user, but not for a
+1900-rated user.
+
+![Hard solves with a -100 margin](output/app_hard_solves.png)
 
 ## What counts as solved
 
@@ -152,7 +195,7 @@ Outputs go to `output/tourist_cumulative.png` and
 
 | File | Purpose |
 | --- | --- |
-| `streamlit_app.py` | Streamlit UI, Plotly charts, profile picker, rating filter, data table |
+| `streamlit_app.py` | Streamlit UI, Plotly charts, profile picker, P/Q filter, hard-solve mode, data table |
 | `cf_rating_vs_solved.py` | Shared Codeforces API client, caching, pagination, calculations, static PNG renderer |
 | `requirements.txt` | Python dependencies |
 | `.streamlit/config.toml` | Streamlit theme and server defaults |

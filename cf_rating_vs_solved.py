@@ -32,6 +32,7 @@ Requirements: requests, matplotlib, numpy.
 from __future__ import annotations
 
 import argparse
+import bisect
 import hashlib
 import json
 import sys
@@ -389,6 +390,35 @@ def fetch_accepted_problems(
             earliest[candidate.key] = candidate
 
     return list(earliest.values())
+
+
+def filter_hard_solves(
+    accepted: list[AcceptedProblem],
+    history: list[RatedContest],
+    margin: int = 0,
+) -> list[AcceptedProblem]:
+    """Keep solves whose problem rating was at least the user's rating + margin.
+
+    The effective rating is the latest rating update at or before the accepted
+    submission time. This means a solve during a rated round is compared with
+    the rating the user carried into that round. Solves before the first rating
+    update, and problems without a rating, are excluded.
+    """
+    if not accepted or not history:
+        return []
+
+    ordered = sorted(history, key=lambda contest: contest.at)
+    times = [contest.at for contest in ordered]
+    ratings = [contest.rating for contest in ordered]
+
+    hard: list[AcceptedProblem] = []
+    for problem in accepted:
+        if problem.rating is None:
+            continue
+        index = bisect.bisect_right(times, problem.at) - 1
+        if index >= 0 and problem.rating >= ratings[index] + margin:
+            hard.append(problem)
+    return hard
 
 
 def fetch_contest_windows(
