@@ -1,33 +1,57 @@
-# Codeforces problem-solving dashboard
+# Codeforces problem-solving dashboard — browser edition
 
-An interactive Streamlit dashboard for one or several Codeforces profiles. It plots:
+A **stlite** build of the dashboard. Python and Streamlit run entirely in the
+browser through Pyodide/WebAssembly, and the static files can be hosted on
+GitHub Pages.
+
+It plots:
 
 - **X axis:** problems solved
 - **Y axis:** contest rating
 - **Colour:** Codeforces rank tier or profile, depending on the display mode
 
-The app uses the public Codeforces API. No login or API key is required.
+The app calls the public Codeforces API directly from the browser. No server,
+login, or API key is required.
 
 ![Single-profile dashboard](output/app_screenshot.png)
 
-## Run
+## Run locally
+
+Because the browser fetches the Python source files, serve the directory rather
+than opening `index.html` directly:
 
 ```powershell
-python -m pip install -r requirements.txt
-python -m streamlit run streamlit_app.py
+python -m http.server 8502
 ```
 
-Then open the URL Streamlit prints, usually:
+Then open:
 
 ```text
-http://localhost:8501
+http://localhost:8502
 ```
 
-The default profile is loaded on first launch. Change the profile selection in
-the sidebar at any time; the dashboard updates immediately.
+The first load downloads the Pyodide runtime and Python packages, so it is
+noticeably slower than later visits. If the sidebar is collapsed, use the
+circular **»** button at the top-left to reopen it.
 
-If the sidebar is collapsed, use the circular **»** button at the top-left to
-reopen it.
+## Deploy to GitHub Pages
+
+This branch is designed to be served from the repository/Pages root:
+
+1. Push the `stlite` branch.
+2. GitHub → **Settings → Pages**.
+3. Source: **Deploy from a branch**.
+4. Branch: `stlite`, folder: `/ (root)`.
+5. Save.
+
+The page will be available at:
+
+```text
+https://<username>.github.io/<repo>/
+```
+
+The static entry point is `index.html`; `streamlit_app.py` and
+`stlite_data.py` are fetched as app assets.
 
 ## Multiple profiles
 
@@ -95,7 +119,8 @@ Leave the filter on **All ratings** to count every accepted problem as before.
   negative margins are easier.
 - Switch views and profiles without restarting the app.
 - Expand **View the underlying rounds** for a sortable table.
-- **Download CSV** of every rated round for the selected profiles.
+- CSV download is hidden in the browser build because stlite does not support
+  Streamlit’s server-backed download button.
 
 ## Rank colours
 
@@ -143,8 +168,8 @@ problem rating >= your rating at solve time + x
   rating-at-the-time yet.
 - Problems with no Codeforces difficulty rating are excluded.
 - Hard-solve mode combines with the P/Q filter: both conditions must hold.
-- The stats card, chart title, axis label, hover text, and CSV all switch to
-  “hard solves” terminology.
+- The stats card, chart title, axis label, hover text, and data table all switch
+  to “hard solves” terminology.
 
 This is **not** Codeforces’ own “hard problem” label. It is relative to the
 user: a 1700-rated problem is hard for a 1500-rated user, but not for a
@@ -171,35 +196,26 @@ practice/upsolving submissions do not inflate a contest result.
 | `contest.list` | Contest start times and durations (Per contest mode) |
 
 Requests are spaced by at least 2.05 seconds, matching Codeforces' public API
-request limit. Responses are cached on disk for 6 hours (24 hours for the
-contest list) in `.cache/`.
+request limit. The browser build has no server-side disk cache: `st.cache_data`
+keeps parsed profiles in memory for the lifetime of the page/session.
 
 - **Refresh from Codeforces** clears the in-memory cache and forces a fresh API
   fetch for all selected profiles.
-- `st.cache_data` keeps parsed profiles in memory for fast profile and view
-  switching.
-
-## Optional static PNGs
-
-The shared data module also includes a matplotlib renderer for one profile:
-
-```powershell
-python cf_rating_vs_solved.py tourist --mode cumulative
-python cf_rating_vs_solved.py tourist --mode contest
-```
-
-Outputs go to `output/tourist_cumulative.png` and
-`output/tourist_contest.png`.
+- Each visitor’s browser calls Codeforces from their own IP. The 2.05-second
+  throttle is per browser session, not global.
+- Codeforces must allow browser CORS requests for this architecture to work.
+  Its public API currently sends `Access-Control-Allow-Origin: *`.
 
 ## Project files
 
 | File | Purpose |
 | --- | --- |
-| `streamlit_app.py` | Streamlit UI, Plotly charts, profile picker, P/Q filter, hard-solve mode, data table |
-| `cf_rating_vs_solved.py` | Shared Codeforces API client, caching, pagination, calculations, static PNG renderer |
-| `requirements.txt` | Python dependencies |
-| `.streamlit/config.toml` | Streamlit theme and server defaults |
-| `output/` | Example screenshots and static charts |
+| `index.html` | Static stlite shell, theme, boot screen, GitHub Pages entry point |
+| `streamlit_app.py` | Streamlit UI, Plotly charts, profile picker, filters, hard-solve mode, data table |
+| `stlite_data.py` | Browser-safe Codeforces client, pagination, calculations, hard-solve filtering |
+| `favicon.svg` | Browser tab icon |
+| `.nojekyll` | Prevent GitHub Pages Jekyll processing |
+| `output/` | Example screenshots |
 
 ## Notes
 
@@ -208,4 +224,8 @@ Outputs go to `output/tourist_cumulative.png` and
   Codeforces profile rating if a round is in progress.
 - The problem-rating filter uses Codeforces' problem difficulty rating, not the
   contest rating on the Y axis.
+- Browser-only means no server-side cache, no shared rate limiter, and no
+  authentication. It is suitable for a public portfolio/demo app.
+- First load is several MB of Pyodide + Python packages. Later loads are faster
+  because the browser caches the assets.
 - This is an unofficial project. Data is provided by the Codeforces public API.

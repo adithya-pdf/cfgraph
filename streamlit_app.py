@@ -7,6 +7,7 @@ Run with:
 from __future__ import annotations
 
 import html
+import sys
 from dataclasses import dataclass
 from typing import Sequence
 
@@ -15,7 +16,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from cf_rating_vs_solved import (
+from stlite_data import (
     AcceptedProblem,
     CFError,
     RatedContest,
@@ -49,6 +50,7 @@ GREEN = "#15803d"
 RED = "#b91c1c"
 DEFAULT_HANDLE = "dandere"
 MAX_PROFILES = 5
+IS_STLITE = sys.platform == "emscripten"
 
 PROFILE_COLORS = ("#0f172a", "#0369a1", "#be123c", "#b45309", "#15803d")
 PROFILE_SYMBOLS = ("circle", "diamond", "square", "triangle-up", "cross")
@@ -1277,10 +1279,14 @@ def sidebar_controls() -> Controls:
             width="stretch",
             help="Ignore both the in-memory and on-disk caches for this run.",
         )
+        sidebar_note = (
+            "Runs entirely in your browser \u00b7 public Codeforces API "
+            "\u00b7 in-memory cache."
+            if IS_STLITE
+            else "Public API only \u00b7 no login \u00b7 responses cached for 6 hours."
+        )
         st.markdown(
-            '<div class="sidebar-note">'
-            "Public API only \u00b7 no login \u00b7 responses cached for 6 hours."
-            "</div>",
+            f'<div class="sidebar-note">{sidebar_note}</div>',
             unsafe_allow_html=True,
         )
 
@@ -1434,12 +1440,13 @@ def data_table(profiles: Sequence[Profile], mode: str, hard_solves: bool) -> Non
                 "Tier": st.column_config.TextColumn("Tier", width="medium"),
             },
         )
-        st.download_button(
-            "Download CSV",
-            data=frame.to_csv(index=False).encode("utf-8"),
-            file_name=file_name,
-            mime="text/csv",
-        )
+        if not IS_STLITE:
+            st.download_button(
+                "Download CSV",
+                data=frame.to_csv(index=False).encode("utf-8"),
+                file_name=file_name,
+                mime="text/csv",
+            )
 
 
 # ---------------------------------------------------------------------------
