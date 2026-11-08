@@ -10,6 +10,16 @@ The app uses the public Codeforces API. No login or API key is required.
 
 ![Single-profile dashboard](output/app_screenshot.png)
 
+## Live deployments
+
+| Version | URL | Runtime |
+| --- | --- | --- |
+| **Streamlit** | https://q-solved-vs-rating-plot-cf.streamlit.app/ | Python server on Streamlit Community Cloud |
+| **stlite** | https://adithya-pdf.github.io/cfgraph/ | Static GitHub Pages, Python runs in the browser via Pyodide |
+
+The stlite build lives on the `stlite` branch and requires no server. The
+Streamlit build is the server-hosted version documented below.
+
 ## Run
 
 ```powershell
