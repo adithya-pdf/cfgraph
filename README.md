@@ -15,6 +15,16 @@ login, or API key is required.
 
 ![Single-profile dashboard](output/app_screenshot.png)
 
+## Live deployments
+
+| Version | URL | Runtime |
+| --- | --- | --- |
+| **stlite** (this branch) | https://adithya-pdf.github.io/cfgraph/ | Static GitHub Pages, Python runs in the browser via Pyodide |
+| **Streamlit** | https://q-solved-vs-rating-plot-cf.streamlit.app/ | Python server on Streamlit Community Cloud |
+
+The stlite build requires no server. The Streamlit build is the server-hosted
+version on the `main` branch.
+
 ## Run locally
 
 Because the browser fetches the Python source files, serve the directory rather
